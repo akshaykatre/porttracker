@@ -131,3 +131,10 @@ dmypy.json
 
 # databases
 *.db 
+
+# Random txt files
+queries.txt 
+
+# Random json files 
+stk.json
+indices.json

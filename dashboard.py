@@ -9,6 +9,13 @@ import dash_table
 import pandas 
 import dash_bootstrap_components as dbc 
 import time
+import json 
+import pdb
+
+stks = open('stk.json', 'r')
+maps = json.load(stks)
+
+queries = open('queries.txt', 'w+')
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -20,8 +27,8 @@ ALLOWED_TYPES = (
 )
 
 fields = { 
-    "Symbol": "text",
-    "Stockname": "text",
+    #"Symbol": "text",
+    "Stock": "text",
     "Price": "number",
     "Units": "number"
 }
@@ -37,11 +44,11 @@ app.layout = dbc.Container([
     ], width=4 )
     ),
     dbc.Row( 
-        dbc.Col(dcc.Input(id='input_Symbol', type='text', placeholder='input Symbol'), width=2)
+        dbc.Col(dcc.Dropdown(id='input_Stock', options=[{'label': i, 'value': i} for i in maps.values()]), width=2)
     ),
-    dbc.Row(
-        dbc.Col(dcc.Input(id='input_Stockname', type='text', placeholder='input Stockname'), width=2)
-    ),
+    # dbc.Row(
+    #     dbc.Col(dcc.Input(id='input_Stockname', type='text', placeholder='input Stockname'), width=2)
+    # ),
     dbc.Row(
         dbc.Col(dcc.Input(id='input_Price', type='number', placeholder='input Price') , width=2)
     ),
@@ -79,31 +86,38 @@ app.layout = dbc.Container([
     [State("input_{}".format(k), "value") for k in fields.keys()],
     State('my-date-picker-single', 'date')
 )
-def enterdata(n_clicks, buy_sell, input_Symbol, input_Stockname, input_Price, input_Units, date):
+def enterdata(n_clicks, buy_sell, input_Stock, input_Price, input_Units, date):
     '''
     Enter or remove data in the database based on the inputs
     '''
-    
-    print(buy_sell, input_Price, input_Stockname, input_Symbol)
-    if buy_sell == 'buy': 
+    print(buy_sell, input_Stock)
+    connection = sqlite3.connect("portfolio.db")
+    if buy_sell == None and n_clicks != 0:
+        return 'Please select type of transaction'
+    with connection as conn:  
+        #if buy_sell == 'buy': 
+        
         try:
-            print("Are we here?")
-            connection = sqlite3.connect("portfolio.db")
-            print("Connectionname: ", connection)
-            with connection as conn: 
-                print( "Its in connection")
-                conn.execute('''INSERT INTO PORTFOLIO(ID, SYMBOL, STOCKNAME, UNITS, PRICE, DATE)
-                            VALUES({id}, '{symbol}', '{stockname}', {units}, {price}, '{dates}')'''.format(id=hash(input_Symbol+input_Stockname), 
-                                    symbol=input_Symbol, stockname=input_Stockname, price=input_Price, units=input_Units, dates=date))
-                conn.commit()
-                print(conn)
-                conn.close()
+#                print("Are we here?")
+#                print("Connectionname: ", connection)
+            ## Perform a check on the number of units being sold
+            if buy_sell == 'sell':
+                df = pandas.read_sql_query("SELECT * from PORTFOLIO", conn)
+                if df.groupby(input_Stock).sum('UNITS') < input_Units:
+                    return 'Check the number of units being sold'
+            query = '''INSERT INTO PORTFOLIO(ID, STOCKNAME, UNITS, PRICE, DATE, TRANSACTIONTYPE)
+                        VALUES({id}, '{stockname}', {units}, {price}, '{dates}', '{ttype}')'''.format(id=[y for y,z in maps.items() if z == input_Stock][0], 
+                                stockname=input_Stock, price=input_Price, units=input_Units, dates=date, ttype=buy_sell) 
+            conn.execute(query)
+            conn.commit()
+            queries.write(query)
             return "Value inserted"
         except Exception as e: 
+            pdb.set_trace()
             print( "does it make exception? ", e )
-            pass
-    if buy_sell =='sell': 
-        return 'We are still working on this'
+            return
+        #if buy_sell =='sell': 
+        #    return 'We are still working on this'
 
 @app.callback(
     Output('tableloc', 'children'),
@@ -111,7 +125,6 @@ def enterdata(n_clicks, buy_sell, input_Symbol, input_Stockname, input_Price, in
 )
 def data_table(n_clicks):
     time.sleep(2)
-    print("printed these")
 
     connection = sqlite3.connect("portfolio.db")
     with connection as conn2: 
@@ -120,6 +133,7 @@ def data_table(n_clicks):
         data = df.to_dict('records')
         #conn.close()
     return dash_table.DataTable(id='tables', columns=columns, data=data)
+
 
 if __name__ == "__main__":
     app.run_server(debug=True)
